@@ -1,82 +1,141 @@
 # Pipeline de Big Data: Livros Kindle (Kaggle) → Parquet → MongoDB
 
-Avaliação N3 – Desenvolvimento com Linguagens Disruptivas I
-Equipe: Yasmin Ferreira, Paula Haas, Gustavo Correia da Silveira, Marcella Cagliari
+**Avaliação N3 – Desenvolvimento com Linguagens Disruptivas I**
 
-Dataset: [Amazon Kindle Books Dataset 2023 (130k books)](https://www.kaggle.com/datasets/asaniczka/amazon-kindle-books-dataset-2023-130k-books)
+**Equipe:** Yasmin Ferreira, Paula Haas, Gustavo Correia da Silveira e Marcella Cagliari.
+
+**Dataset:** [Amazon Kindle Books Dataset 2023 (130k books)](https://www.kaggle.com/datasets/asaniczka/amazon-kindle-books-dataset-2023-130k-books)
 
 ## O que o pipeline faz
 
-1. **Captura**: baixa o CSV do Kaggle para `landing/` (o original nunca é alterado)
-2. **Leitura**: Spark lê o CSV com os tipos das colunas declarados
-3. **Validação**: registros inválidos vão para `rejected/` com o motivo
-4. **Transformação**: cria `publication.year`, `pricing.priceRange`, `rating.hasReviews`, `author.authorKey`, `ingestion.runId/loadedAt`
-5. **Parquet**: grava em `curated/books/`, particionado por ano de publicação
-6. **MongoDB**: carrega `books` (upsert pelo `asin`) e gera `categories` e `authors` por agregação
-7. **Índices e log**: cria índices e grava a execução em `ingestion_runs`
+1. **Captura:** baixa o CSV do Kaggle para `landing/` (o arquivo original nunca é alterado).
+2. **Leitura:** Spark lê o CSV com os tipos das colunas declarados.
+3. **Validação:** registros inválidos são enviados para `rejected/`, acompanhados do motivo da rejeição.
+4. **Transformação:** cria campos como `publication.year`, `pricing.priceRange`, `rating.hasReviews`, `author.authorKey` e `ingestion.runId/loadedAt`.
+5. **Parquet:** grava os dados em `curated/books/`, particionados por ano de publicação.
+6. **MongoDB:** carrega os livros na coleção `books` (upsert pelo `asin`) e gera `categories` e `authors` por agregação.
+7. **Índices e log:** cria índices e registra a execução na coleção `ingestion_runs`.
 
 ## Requisitos
 
-Instalar pelos sites oficiais (funciona em Mac Intel ou Apple Silicon, sem Homebrew):
+Para executar o projeto no Windows, é necessário instalar:
 
-- Python 3.12 (ex.: 3.12.10, instalador macOS universal2): https://www.python.org/downloads/release/python-31210/ — o Spark não funciona com o Python 3.14
-- Java 17 (Temurin JDK): https://adoptium.net/temurin/releases/ (escolher macOS, a arquitetura do seu Mac e a versão 17)
-- Docker Desktop: https://www.docker.com/products/docker-desktop/ (escolher a versão para o chip do seu Mac)
+- **Python 3.12:** [Download oficial](https://www.python.org/downloads/release/python-31210/)
+- **Java JDK 17 (Temurin):** [Download](https://adoptium.net/temurin/releases/)
+- **Docker Desktop:** [Download](https://www.docker.com/products/docker-desktop/)
+- **Hadoop para Windows:** disponibilizar `winutils.exe` e `hadoop.dll` na pasta `C:\hadoop\bin`.
 
-## Como executar
+Também é necessário ter o Docker Desktop instalado e em execução.
 
-```bash
-# 1. Subir o MongoDB (Docker Desktop precisa estar aberto)
+## Como executar no Windows
+
+### 1. Clonar o repositório
+
+```powershell
+git clone https://github.com/Calangogu1/kindle-pipeline.git
+cd kindle-pipeline
+```
+
+### 2. Configurar o Hadoop
+
+No PowerShell, execute:
+
+```powershell
+$env:HADOOP_HOME = "C:\hadoop"
+$env:hadoop_home = "C:\hadoop"
+$env:PATH += ";C:\hadoop\bin"
+```
+
+### 3. Iniciar o MongoDB
+
+Com o Docker Desktop aberto, execute:
+
+```powershell
 docker run -d --name mongo-kindle -p 27017:27017 -v mongo-kindle-data:/data/db mongo:7
-# (se o contêiner já existir, use: docker start mongo-kindle)
+```
 
-# 2. Entrar na pasta do projeto
-cd caminho/para/kindle-pipeline
+Caso o contêiner já exista, utilize:
 
-# 3. Criar e ativar o ambiente virtual
-python3.12 -m venv .venv
-source .venv/bin/activate
+```powershell
+docker start mongo-kindle
+```
 
-# 4. Instalar as dependências
+### 4. Criar e ativar o ambiente virtual
+
+```powershell
+py -3.12 -m venv .venv
+```
+
+Ative o ambiente:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+### 5. Instalar as dependências
+
+```powershell
 pip install -r requirements.txt
+```
 
-# 5. Rodar o pipeline (baixa o dataset sozinho na primeira vez)
+### 6. Executar o pipeline
+
+```powershell
 python pipeline.py
+```
 
-# 6. Ver as saídas esperadas
+Na primeira execução, o pipeline realiza o download do dataset automaticamente, caso necessário.
+
+### 7. Executar as consultas de demonstração
+
+```powershell
 python consultas.py
 ```
 
-Se o download automático falhar, baixe o CSV manualmente no Kaggle (botão **Download**), descompacte e coloque o arquivo `.csv` dentro da pasta `landing/`. Depois rode `python pipeline.py` de novo.
+As consultas apresentam os resultados armazenados no MongoDB.
 
-### Usando MongoDB Atlas em vez do Docker
+**Observação:** se o download automático falhar, baixe o CSV manualmente pelo Kaggle, descompacte e coloque o arquivo dentro da pasta `landing/`. Depois, execute novamente `python pipeline.py`.
 
-```bash
-export MONGO_URI="mongodb+srv://USUARIO:SENHA@cluster.mongodb.net"
+## Utilizando MongoDB Atlas
+
+Também é possível utilizar o MongoDB Atlas no lugar do Docker.
+
+No PowerShell, configure a variável de ambiente:
+
+```powershell
+$env:MONGO_URI = "mongodb+srv://USUARIO:SENHA@cluster.mongodb.net"
+```
+
+Depois execute:
+
+```powershell
 python pipeline.py
 ```
 
 ## Saídas esperadas
 
-| Onde | O que aparece |
+| Local | Resultado |
 |---|---|
-| Terminal | Etapas 1/7 a 7/7 e o resumo (lidos, aceitos, rejeitados, duplicados, duração) |
-| `landing/` | CSV original |
-| `curated/books/` | Uma pasta `publication_year=AAAA` por ano, com arquivos `.parquet` |
-| `rejected/` | CSV com os registros rejeitados e a coluna `motivo_rejeicao` |
-| MongoDB, banco `kindle` | Coleções `books`, `categories`, `authors`, `ingestion_runs` |
-| `python consultas.py` | Tabelas de categorias, Kindle Unlimited, preço x selos, publicações por ano e ranking de autores |
+| Terminal | Etapas 1/7 até 7/7 e resumo da execução |
+| `landing/` | Arquivo CSV original |
+| `curated/books/` | Arquivos Parquet particionados por ano |
+| `rejected/` | CSV com registros rejeitados e motivo da rejeição |
+| MongoDB (`kindle`) | Coleções `books`, `categories`, `authors` e `ingestion_runs` |
+| `python consultas.py` | Consultas de demonstração e tabelas com os resultados |
 
-O pipeline pode ser executado várias vezes: o upsert pelo `asin` evita duplicar livros.
+O pipeline pode ser executado várias vezes. O mecanismo de upsert utilizando o campo `asin` evita a duplicação de livros.
 
-## Estrutura
+## Estrutura do projeto
 
-```
+```text
 kindle-pipeline/
-├── pipeline.py        # pipeline completo
-├── consultas.py       # consultas de demonstração
+├── pipeline.py
+├── consultas.py
 ├── requirements.txt
-├── landing/           # CSV original (criada na execução)
-├── curated/books/     # Parquet limpo (criada na execução)
-└── rejected/          # registros rejeitados (criada na execução)
+├── landing/
+├── curated/
+│   └── books/
+└── rejected/
 ```
+
+As pastas `landing/`, `curated/` e `rejected/` são utilizadas para armazenar os dados durante a execução do pipeline.
