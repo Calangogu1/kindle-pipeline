@@ -109,13 +109,19 @@ def limpa(coluna, padrao=None):
     return F.when(vazio, F.lit(None)).otherwise(t)
 
 
-def _chave_autor(nome):
-    import re
-    import unicodedata
-    if not nome:
-        return "desconhecido"
-    s = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode().lower()
-    return re.sub(r"[^a-z0-9]+", "-", s).strip("-") or "desconhecido"
+def chave_autor_spark(coluna):
+    """Normaliza o nome do autor usando apenas funções nativas do Spark."""
+    origem = "áàâãäåéèêëíìîïóòôõöúùûüçñýÿ"
+    destino = "aaaaaaeeeeiiiiooooouuuucnyy"
+
+    s = F.translate(F.lower(coluna), origem, destino)
+    s = F.regexp_replace(s, r"[^a-z0-9]+", "-")
+    s = F.regexp_replace(s, r"(^-+|-+$)", "")
+
+    return F.when(
+        s.isNull() | (s == ""),
+        F.lit("desconhecido")
+    ).otherwise(s)
 
 
 # ------------------------------------------------------------------- MAIN
@@ -202,14 +208,16 @@ def main():
             .when(F.col("price") <= 20, "10-20")
             .otherwise("acima-20")
         )
-        chave_autor = F.udf(_chave_autor, StringType())
         nome_autor = limpa("author", "Desconhecido")
         carga = inicio.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         final = unicos.select(
             F.col("asin").alias("_id"),
             limpa("title").alias("title"),
-            F.struct(nome_autor.alias("name"), chave_autor(nome_autor).alias("authorKey")).alias("author"),
+            F.struct(
+            nome_autor.alias("name"),
+            chave_autor_spark(nome_autor).alias("authorKey")
+            ).alias("author"),
             limpa("soldBy", "Desconhecido").alias("seller"),
             F.col("imgUrl").alias("imageUrl"),
             F.col("productURL").alias("productUrl"),
